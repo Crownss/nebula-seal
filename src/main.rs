@@ -1,7 +1,8 @@
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce};
 use argon2::{Algorithm, Argon2, Params, Version};
-use clap::Parser;
+use clap::error::ErrorKind;
+use clap::{CommandFactory, Parser};
 use pbkdf2::pbkdf2_hmac;
 use rand::RngCore;
 use rand::rngs::OsRng;
@@ -28,11 +29,11 @@ struct Args {
     #[arg(short, long)]
     password_file: String,
     /// Relative path filename to the input file
-    #[arg(short, long)]
-    input: String,
+    #[arg(short, long, num_args = 1.., required = true)]
+    input: Vec<String>,
     /// Relative path filename to the output file (if this field is empty, the output will be overwritten input file)
-    #[arg(short, long)]
-    output: Option<String>,
+    #[arg(short, long, num_args = 1..)]
+    output: Vec<String>,
     /// decryption operation
     #[arg(short, long, default_value_t = false)]
     decrypt: bool,
@@ -56,6 +57,19 @@ fn main() {
         std::process::exit(1);
     }
 
+    if !args.output.is_empty() && args.output.len() != args.input.len() {
+        let mut cmd = Args::command();
+        cmd.error(
+            ErrorKind::WrongNumberOfValues,
+            format!(
+                "{} inputs but {} outputs",
+                args.input.len(),
+                args.output.len()
+            ),
+        )
+        .exit();
+    }
+
     let password = fs::read_to_string(&args.password_file)
         .expect("Failed to read password file")
         .trim()
@@ -66,61 +80,65 @@ fn main() {
     }
     let version = args.version.unwrap_or(2);
 
-    match args.encrypt {
-        true => {
-            let input_path = Path::new(&args.input);
-            let mut file = File::open(input_path).expect("Failed to open input file");
-            let mut file_data = Vec::new();
-            file.read_to_end(&mut file_data)
-                .expect("Failed to read file");
+    for (i, input) in args.input.iter().enumerate() {
+        let output = args.output.get(i);
+        match args.encrypt {
+            true => {
+                let input_path = Path::new(input);
+                let mut file = File::open(input_path).expect("Failed to open input file");
+                let mut file_data = Vec::new();
+                file.read_to_end(&mut file_data)
+                    .expect("Failed to read file");
 
-            let filename = input_path.file_name().unwrap().to_str().unwrap();
-            let (enc_filename, salt1, nonce1) =
-                encrypt_with_password(filename.as_bytes(), &password, version);
+                let filename = input_path.file_name().unwrap().to_str().unwrap();
+                let (enc_filename, salt1, nonce1) =
+                    encrypt_with_password(filename.as_bytes(), &password, version);
 
-            let (enc_data, salt2, nonce2) = encrypt_with_password(&file_data, &password, version);
+                let (enc_data, salt2, nonce2) =
+                    encrypt_with_password(&file_data, &password, version);
 
-            let out_path = match &args.output {
-                Some(path) if !path.is_empty() => Path::new(path).to_path_buf(),
-                _ => input_path.to_path_buf(),
-            };
-            let mut out_file = File::create(&out_path).expect("Failed to create output file");
+                let out_path = match output {
+                    Some(path) if !path.is_empty() => Path::new(path).to_path_buf(),
+                    _ => input_path.to_path_buf(),
+                };
+                let mut out_file = File::create(&out_path).expect("Failed to create output file");
 
-            out_file.write_all(&salt1).unwrap();
-            out_file.write_all(&nonce1).unwrap();
-            out_file
-                .write_all(&(enc_filename.len() as u32).to_le_bytes())
-                .unwrap();
-            out_file.write_all(&enc_filename).unwrap();
-            out_file.write_all(&salt2).unwrap();
-            out_file.write_all(&nonce2).unwrap();
-            out_file
-                .write_all(&(enc_data.len() as u64).to_le_bytes())
-                .unwrap();
-            out_file.write_all(&enc_data).unwrap();
-            out_file.sync_all().unwrap();
+                out_file.write_all(&salt1).unwrap();
+                out_file.write_all(&nonce1).unwrap();
+                out_file
+                    .write_all(&(enc_filename.len() as u32).to_le_bytes())
+                    .unwrap();
+                out_file.write_all(&enc_filename).unwrap();
+                out_file.write_all(&salt2).unwrap();
+                out_file.write_all(&nonce2).unwrap();
+                out_file
+                    .write_all(&(enc_data.len() as u64).to_le_bytes())
+                    .unwrap();
+                out_file.write_all(&enc_data).unwrap();
+                out_file.sync_all().unwrap();
 
-            println!("Encrypted file written to: {}", out_path.display());
-        }
-        false => {
-            let input_path = Path::new(&args.input);
-            let mut file = File::open(input_path).expect("Failed to open encrypted file");
-            let mut buf = Vec::new();
-            file.read_to_end(&mut buf)
-                .expect("Failed to read encrypted file");
+                println!("Encrypted file written to: {}", out_path.display());
+            }
+            false => {
+                let input_path = Path::new(input);
+                let mut file = File::open(input_path).expect("Failed to open encrypted file");
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)
+                    .expect("Failed to read encrypted file");
 
-            let data = decrypt_file(&buf, &password, version).expect("Decryption failed");
+                let data = decrypt_file(&buf, &password, version).expect("Decryption failed");
 
-            let out_path = match &args.output {
-                Some(path) if !path.is_empty() => Path::new(path).to_path_buf(),
-                _ => input_path.to_path_buf(),
-            };
-            let mut out_file = File::create(&out_path).expect("Failed to create output file");
-            out_file
-                .write_all(&data)
-                .expect("Failed to write decrypted data");
-            out_file.sync_all().unwrap();
-            println!("Decrypted file written to: {}", out_path.display());
+                let out_path = match output {
+                    Some(path) if !path.is_empty() => Path::new(path).to_path_buf(),
+                    _ => input_path.to_path_buf(),
+                };
+                let mut out_file = File::create(&out_path).expect("Failed to create output file");
+                out_file
+                    .write_all(&data)
+                    .expect("Failed to write decrypted data");
+                out_file.sync_all().unwrap();
+                println!("Decrypted file written to: {}", out_path.display());
+            }
         }
     }
 }

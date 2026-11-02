@@ -19,6 +19,7 @@
 - [Quick Start](#quick-start)
 - [Usage](#usage)
 - [Examples](#examples)
+- [Multiple Files](#multiple-files)
 - [How It Works](#how-it-works)
 - [File Format](#file-format)
 - [Tips & Caveats](#tips--caveats)
@@ -34,6 +35,7 @@
 | **Strong encryption**      | AES-256-GCM authenticated encryption — tampering is detected                  |
 | **Modern key derivation**  | Argon2id by default (256 MiB, 3 passes, 4 lanes); PBKDF2 kept for older files |
 | **Filename encryption**    | The original filename is encrypted too, with its own salt and nonce           |
+| **Multiple files**         | Pass several files to `-i` in one run — selected files or a whole folder      |
 | **Any file as a password** | Use a text file, `LICENSE`, even `main.rs` — its content is the password      |
 | **Memory hygiene**         | Derived keys are wiped from memory after use (`zeroize`)                      |
 | **Small binary**           | Release build uses LTO and `opt-level = "z"`                                  |
@@ -61,16 +63,16 @@ cargo b --release
 ## Usage
 
 ```text
-pbe-wallet -p <PASSWORD_FILE> -i <INPUT> (-e | -d) [-o <OUTPUT>] [-v <VERSION>]
+pbe-wallet -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERSION>]
 ```
 
 | Flag | Long form         | Required | Description                                      |
 | :--: | ----------------- | :------: | ------------------------------------------------ |
 | `-p` | `--password-file` |   yes    | Path to the file whose content is the password   |
-| `-i` | `--input`         |   yes    | Path to the file to encrypt / decrypt            |
+| `-i` | `--input`         |   yes    | One or more files to encrypt / decrypt           |
 | `-e` | `--encrypt`       |  one of  | Encrypt mode                                     |
 | `-d` | `--decrypt`       |  one of  | Decrypt mode                                     |
-| `-o` | `--output`        |    no    | Output path — defaults to overwriting the input  |
+| `-o` | `--output`        |    no    | Output path(s), one per input — default: overwrite the input |
 | `-v` | —                 |    no    | Key-derivation version (see below) — default `2` |
 | `-h` | `--help`          |    no    | Show help                                        |
 | `-V` | —                 |    no    | Show program version                             |
@@ -121,13 +123,56 @@ pbe-wallet -p <PASSWORD_FILE> -i <INPUT> (-e | -d) [-o <OUTPUT>] [-v <VERSION>]
 ./pbe-wallet -p ./password.txt -i ./old-secret.txt -d -v 1
 ```
 
-**Encrypt a whole folder**
+---
+
+## Multiple Files
+
+`-i` accepts more than one file. Files are processed one by one, in the order given, with the same password and version.
+
+**Selected files**
 
 ```bash
-for f in my-secret-folder/*; do
-  ./pbe-wallet -p ./password.txt -i "$f" -e
-done
+./pbe-wallet -p ./password.txt -i ./a.txt ./b.pdf ./notes.md -e
+./pbe-wallet -p ./password.txt -i ./a.txt ./b.pdf ./notes.md -d
 ```
+
+**Selected files with separate outputs**
+
+Give `-o` the same number of paths as `-i`. They are matched by position (1st input → 1st output, and so on).
+
+```bash
+./pbe-wallet -p ./password.txt -i ./a.txt ./b.txt -o ./a.enc ./b.enc -e
+./pbe-wallet -p ./password.txt -i ./a.enc ./b.enc -o ./a.txt ./b.txt -d
+```
+
+If the counts don't match, nothing is processed:
+
+```text
+error: 2 inputs but 1 outputs
+```
+
+**Whole folder (files at the top level only)**
+
+```bash
+find ./my-secret-folder -maxdepth 1 -type f -exec ./pbe-wallet -p ./password.txt -e -i {} +
+```
+
+**Whole folder, including subfolders**
+
+```bash
+find ./my-secret-folder -type f -exec ./pbe-wallet -p ./password.txt -e -i {} +
+```
+
+Use `-d` instead of `-e` in the same command to decrypt. You can also filter, e.g. `-name '*.txt'`.
+
+> [!WARNING]
+> Don't pass a folder directly, or a glob such as `my-secret-folder/*` that also matches subfolders.
+> Folders can't be read as files, so the run stops with `Is a directory`.
+
+> [!CAUTION]
+> If a run stops partway (missing file, wrong password, a folder in the list), the files **before** it
+> are already done and the rest are untouched. Don't just rerun the same encrypt command — the files
+> that were already encrypted would be encrypted a second time. Run it again only on the remaining files.
 
 ---
 
@@ -210,7 +255,7 @@ All integers are **little-endian**.
 
 - **Layered encryption** — you can encrypt a file multiple times, but you must decrypt it the same number of times, in reverse order, with the same passwords and versions.
   > _"Doesn't matter how many N times you encrypt — you'll need N times to decrypt it back."_
-- **Memory use** — the whole file is loaded into RAM, and Argon2id uses ~256 MiB per key derivation (two per file). Expect each run to take a moment.
+- **Memory use** — the whole file is loaded into RAM, and Argon2id uses ~256 MiB per key derivation (two per file). Expect each file to take a moment, so large batches take a while.
 - **Backups** — without `-o` the input is overwritten. Keep a copy until decryption is confirmed.
 - **Password files** — store them somewhere safe and never commit them to git.
 
