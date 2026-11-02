@@ -23,7 +23,6 @@
 - [How It Works](#how-it-works)
 - [File Format](#file-format)
 - [Tips & Caveats](#tips--caveats)
-- [Known Issues](#known-issues)
 - [License](#license)
 
 ---
@@ -63,7 +62,7 @@ cargo b --release
 ## Usage
 
 ```text
-nebula-seal -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERSION>]
+nebula-seal -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-m <VERSION>]
 ```
 
 | Flag | Long form             | Required | Description                                                  |
@@ -75,7 +74,7 @@ nebula-seal -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VER
 | `-o` | `--output`            |    no    | Output path(s), one per input — default: overwrite the input |
 | `-m` | `--mechanism-version` |    no    | Key-derivation version (see below) — default `2`             |
 | `-h` | `--help`              |    no    | Show help                                                    |
-| `-V` | —                     |    no    | Show program version                                         |
+| `-V` | `--version`           |    no    | Show program version                                         |
 
 ### Key-derivation versions
 
@@ -120,7 +119,7 @@ nebula-seal -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VER
 **Decrypt an older (PBKDF2) file**
 
 ```bash
-./nebula-seal -p ./password.txt -i ./old-secret.txt -d -v 1
+./nebula-seal -p ./password.txt -i ./old-secret.txt -d -m 1
 ```
 
 ---
@@ -247,7 +246,7 @@ All integers are **little-endian**.
 |  8  | Encrypted contents + 16-byte GCM tag | variable        |
 
 > [!IMPORTANT]
-> The KDF version is **not stored** in the file. Always decrypt with the same `-v` you used to encrypt.
+> The KDF version is **not stored** in the file. Always decrypt with the same `-m` you used to encrypt.
 
 ---
 
@@ -258,25 +257,6 @@ All integers are **little-endian**.
 - **Memory use** — the whole file is loaded into RAM, and Argon2id uses ~256 MiB per key derivation (two per file). Expect each file to take a moment, so large batches take a while.
 - **Backups** — without `-o` the input is overwritten. Keep a copy until decryption is confirmed.
 - **Password files** — store them somewhere safe and never commit them to git.
-
----
-
-## Known Issues
-
-<details>
-<summary><b>Debug build panics on startup</b></summary>
-
-<br/>
-
-Running a debug build (`cargo run` / `cargo b`) panics with:
-
-```text
-Argument names must be unique, but 'version' is in use by more than one argument or group
-```
-
-The `-v, --version` option clashes with clap's built-in `--version` flag. Release builds skip that check and work normally — build with `--release` and use the short form `-v <N>`.
-
-</details>
 
 ---
 
