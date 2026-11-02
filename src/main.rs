@@ -42,7 +42,7 @@ struct Args {
     encrypt: bool,
     /// default is `2` use argon2id mechanism and `1` use pbkdf2 (recommend to use `2` or don't use this param either)
     #[arg(short, long)]
-    version: Option<i8>,
+    mechanism_version: Option<i8>,
 }
 
 fn main() {
@@ -79,7 +79,7 @@ fn main() {
         eprintln!("Password file cannot be empty.");
         std::process::exit(1);
     }
-    let version = args.version.unwrap_or(2);
+    let version = args.mechanism_version.unwrap_or(2);
 
     for (i, input) in args.input.iter().enumerate() {
         let output = args.output.get(i);

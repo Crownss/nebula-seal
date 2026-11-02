@@ -66,24 +66,24 @@ cargo b --release
 nebula-seal -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERSION>]
 ```
 
-| Flag | Long form         | Required | Description                                                  |
-| :--: | ----------------- | :------: | ------------------------------------------------------------ |
-| `-p` | `--password-file` |   yes    | Path to the file whose content is the password               |
-| `-i` | `--input`         |   yes    | One or more files to encrypt / decrypt                       |
-| `-e` | `--encrypt`       |  one of  | Encrypt mode                                                 |
-| `-d` | `--decrypt`       |  one of  | Decrypt mode                                                 |
-| `-o` | `--output`        |    no    | Output path(s), one per input — default: overwrite the input |
-| `-v` | —                 |    no    | Key-derivation version (see below) — default `2`             |
-| `-h` | `--help`          |    no    | Show help                                                    |
-| `-V` | —                 |    no    | Show program version                                         |
+| Flag | Long form             | Required | Description                                                  |
+| :--: | --------------------- | :------: | ------------------------------------------------------------ |
+| `-p` | `--password-file`     |   yes    | Path to the file whose content is the password               |
+| `-i` | `--input`             |   yes    | One or more files to encrypt / decrypt                       |
+| `-e` | `--encrypt`           |  one of  | Encrypt mode                                                 |
+| `-d` | `--decrypt`           |  one of  | Decrypt mode                                                 |
+| `-o` | `--output`            |    no    | Output path(s), one per input — default: overwrite the input |
+| `-m` | `--mechanism-version` |    no    | Key-derivation version (see below) — default `2`             |
+| `-h` | `--help`              |    no    | Show help                                                    |
+| `-V` | —                     |    no    | Show program version                                         |
 
 ### Key-derivation versions
 
-|      `-v`       | Algorithm          | Parameters                          | When to use                               |
-| :-------------: | ------------------ | ----------------------------------- | ----------------------------------------- |
-| `2` _(default)_ | **Argon2id**       | 256 MiB memory · 3 passes · 4 lanes | All new files                             |
-|       `1`       | PBKDF2-HMAC-SHA256 | 1,000,000 iterations                | Files encrypted before Argon2id was added |
-|      other      | PBKDF2 (fallback)  | same as `1`                         | —                                         |
+|      `-m`       | Algorithm           | Parameters                          | When to use                               |
+| :-------------: | ------------------- | ----------------------------------- | ----------------------------------------- |
+| `2` _(default)_ | **Argon2id**        | 256 MiB memory · 3 passes · 4 lanes | All new files                             |
+|       `1`       | PBKDF2-HMAC-SHA256  | 1,000,000 iterations                | Files encrypted before Argon2id was added |
+|      other      | Argon2id (fallback) | same as `2`                         | —                                         |
 
 ### Password file rules
 
