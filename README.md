@@ -1,6 +1,6 @@
 <div align="center">
 
-# pbe-wallet
+# nebula-seal
 
 **A tiny Rust CLI for password-based encryption of files — contents _and_ filenames.**
 
@@ -49,10 +49,10 @@
 cargo b --release
 
 # 2. Encrypt
-./target/release/pbe-wallet -p ./password.txt -i ./secret.txt -e
+./target/release/nebula-seal -p ./password.txt -i ./secret.txt -e
 
 # 3. Decrypt
-./target/release/pbe-wallet -p ./password.txt -i ./secret.txt -d
+./target/release/nebula-seal -p ./password.txt -i ./secret.txt -d
 ```
 
 > [!WARNING]
@@ -63,19 +63,19 @@ cargo b --release
 ## Usage
 
 ```text
-pbe-wallet -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERSION>]
+nebula-seal -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERSION>]
 ```
 
-| Flag | Long form         | Required | Description                                      |
-| :--: | ----------------- | :------: | ------------------------------------------------ |
-| `-p` | `--password-file` |   yes    | Path to the file whose content is the password   |
-| `-i` | `--input`         |   yes    | One or more files to encrypt / decrypt           |
-| `-e` | `--encrypt`       |  one of  | Encrypt mode                                     |
-| `-d` | `--decrypt`       |  one of  | Decrypt mode                                     |
+| Flag | Long form         | Required | Description                                                  |
+| :--: | ----------------- | :------: | ------------------------------------------------------------ |
+| `-p` | `--password-file` |   yes    | Path to the file whose content is the password               |
+| `-i` | `--input`         |   yes    | One or more files to encrypt / decrypt                       |
+| `-e` | `--encrypt`       |  one of  | Encrypt mode                                                 |
+| `-d` | `--decrypt`       |  one of  | Decrypt mode                                                 |
 | `-o` | `--output`        |    no    | Output path(s), one per input — default: overwrite the input |
-| `-v` | —                 |    no    | Key-derivation version (see below) — default `2` |
-| `-h` | `--help`          |    no    | Show help                                        |
-| `-V` | —                 |    no    | Show program version                             |
+| `-v` | —                 |    no    | Key-derivation version (see below) — default `2`             |
+| `-h` | `--help`          |    no    | Show help                                                    |
+| `-V` | —                 |    no    | Show program version                                         |
 
 ### Key-derivation versions
 
@@ -99,28 +99,28 @@ pbe-wallet -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERS
 **Encrypt / decrypt in place**
 
 ```bash
-./pbe-wallet -p ./password.txt -i ./secret.txt -e
-./pbe-wallet -p ./password.txt -i ./secret.txt -d
+./nebula-seal -p ./password.txt -i ./secret.txt -e
+./nebula-seal -p ./password.txt -i ./secret.txt -d
 ```
 
 **Use any file as the password**
 
 ```bash
-./pbe-wallet -p ./LICENSE -i ./Cargo.toml -e
-./pbe-wallet -p ./LICENSE -i ./Cargo.toml -d
+./nebula-seal -p ./LICENSE -i ./Cargo.toml -e
+./nebula-seal -p ./LICENSE -i ./Cargo.toml -d
 ```
 
 **Write to a separate output file**
 
 ```bash
-./pbe-wallet -p ./password.txt -i ./secret.txt -o ./secret.enc -e
-./pbe-wallet -p ./password.txt -i ./secret.enc -o ./secret.txt -d
+./nebula-seal -p ./password.txt -i ./secret.txt -o ./secret.enc -e
+./nebula-seal -p ./password.txt -i ./secret.enc -o ./secret.txt -d
 ```
 
 **Decrypt an older (PBKDF2) file**
 
 ```bash
-./pbe-wallet -p ./password.txt -i ./old-secret.txt -d -v 1
+./nebula-seal -p ./password.txt -i ./old-secret.txt -d -v 1
 ```
 
 ---
@@ -132,8 +132,8 @@ pbe-wallet -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERS
 **Selected files**
 
 ```bash
-./pbe-wallet -p ./password.txt -i ./a.txt ./b.pdf ./notes.md -e
-./pbe-wallet -p ./password.txt -i ./a.txt ./b.pdf ./notes.md -d
+./nebula-seal -p ./password.txt -i ./a.txt ./b.pdf ./notes.md -e
+./nebula-seal -p ./password.txt -i ./a.txt ./b.pdf ./notes.md -d
 ```
 
 **Selected files with separate outputs**
@@ -141,8 +141,8 @@ pbe-wallet -p <PASSWORD_FILE> -i <INPUT>... (-e | -d) [-o <OUTPUT>...] [-v <VERS
 Give `-o` the same number of paths as `-i`. They are matched by position (1st input → 1st output, and so on).
 
 ```bash
-./pbe-wallet -p ./password.txt -i ./a.txt ./b.txt -o ./a.enc ./b.enc -e
-./pbe-wallet -p ./password.txt -i ./a.enc ./b.enc -o ./a.txt ./b.txt -d
+./nebula-seal -p ./password.txt -i ./a.txt ./b.txt -o ./a.enc ./b.enc -e
+./nebula-seal -p ./password.txt -i ./a.enc ./b.enc -o ./a.txt ./b.txt -d
 ```
 
 If the counts don't match, nothing is processed:
@@ -154,13 +154,13 @@ error: 2 inputs but 1 outputs
 **Whole folder (files at the top level only)**
 
 ```bash
-find ./my-secret-folder -maxdepth 1 -type f -exec ./pbe-wallet -p ./password.txt -e -i {} +
+find ./my-secret-folder -maxdepth 1 -type f -exec ./nebula-seal -p ./password.txt -e -i {} +
 ```
 
 **Whole folder, including subfolders**
 
 ```bash
-find ./my-secret-folder -type f -exec ./pbe-wallet -p ./password.txt -e -i {} +
+find ./my-secret-folder -type f -exec ./nebula-seal -p ./password.txt -e -i {} +
 ```
 
 Use `-d` instead of `-e` in the same command to decrypt. You can also filter, e.g. `-name '*.txt'`.
