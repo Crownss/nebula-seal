@@ -40,6 +40,7 @@ struct Args {
     /// encryption operation
     #[arg(short, long, default_value_t = false)]
     encrypt: bool,
+    /// default is `2` use argon2id mechanism and `1` use pbkdf2 (recommend to use `2` or don't use this param either)
     #[arg(short, long)]
     version: Option<i8>,
 }
@@ -160,12 +161,8 @@ fn derive_key_v(version: i8, password: &str, salt: &[u8]) -> Option<Zeroizing<[u
             Some(key)
         }
         2 => Some(derive_key(password, salt)),
-        // if input user neither 1 or 2 fallback to pbkdf2
-        _ => {
-            let mut key = Zeroizing::new([0u8; KEY_LEN]);
-            pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITER, &mut *key);
-            Some(key)
-        }
+        // if input user neither 1 or 2 fallback to argon2id
+        _ => Some(derive_key(password, salt)),
     }
 }
 fn decrypt_file(buf: &[u8], password: &str, version: i8) -> Result<Vec<u8>, String> {
