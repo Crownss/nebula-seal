@@ -10,6 +10,8 @@ opt-level = "z"
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
 aes-gcm = "0.10"
+argon2 = "0.5"
+zeroize = "1"
 pbkdf2 = "0.12"
 sha2 = "0.10"
 rand = "0.8"

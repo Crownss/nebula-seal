@@ -1,5 +1,6 @@
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce};
+use argon2::{Algorithm, Argon2, Params, Version};
 use clap::Parser;
 use pbkdf2::pbkdf2_hmac;
 use rand::RngCore;
@@ -9,11 +10,16 @@ use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
+use zeroize::Zeroizing;
 
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
 const PBKDF2_ITER: u32 = 1_000_000;
 const KEY_LEN: usize = 32;
+// 256 MiB, 3 passes, 4 lanes — tune so derivation takes ~0.5–1 s on your hardware
+const M_COST_KIB: u32 = 256 * 1024;
+const T_COST: u32 = 3;
+const P_COST: u32 = 4;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -33,6 +39,8 @@ struct Args {
     /// encryption operation
     #[arg(short, long, default_value_t = false)]
     encrypt: bool,
+    #[arg(short, long)]
+    version: Option<i8>,
 }
 
 fn main() {
@@ -56,6 +64,7 @@ fn main() {
         eprintln!("Password file cannot be empty.");
         std::process::exit(1);
     }
+    let version = args.version.unwrap_or(2);
 
     match args.encrypt {
         true => {
@@ -67,9 +76,9 @@ fn main() {
 
             let filename = input_path.file_name().unwrap().to_str().unwrap();
             let (enc_filename, salt1, nonce1) =
-                encrypt_with_password(filename.as_bytes(), &password);
+                encrypt_with_password(filename.as_bytes(), &password, version);
 
-            let (enc_data, salt2, nonce2) = encrypt_with_password(&file_data, &password);
+            let (enc_data, salt2, nonce2) = encrypt_with_password(&file_data, &password, version);
 
             let out_path = match &args.output {
                 Some(path) if !path.is_empty() => Path::new(path).to_path_buf(),
@@ -100,7 +109,7 @@ fn main() {
             file.read_to_end(&mut buf)
                 .expect("Failed to read encrypted file");
 
-            let data = decrypt_file(&buf, &password).expect("Decryption failed");
+            let data = decrypt_file(&buf, &password, version).expect("Decryption failed");
 
             let out_path = match &args.output {
                 Some(path) if !path.is_empty() => Path::new(path).to_path_buf(),
@@ -115,7 +124,33 @@ fn main() {
         }
     }
 }
-fn decrypt_file(buf: &[u8], password: &str) -> Result<Vec<u8>, String> {
+
+fn derive_key(password: &str, salt: &[u8]) -> Zeroizing<[u8; KEY_LEN]> {
+    let params = Params::new(M_COST_KIB, T_COST, P_COST, Some(KEY_LEN)).unwrap();
+    let mut key = Zeroizing::new([0u8; KEY_LEN]);
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+        .hash_password_into(password.as_bytes(), salt, &mut *key)
+        .expect("argon2 failure");
+    key // zeroized automatically on drop
+}
+
+fn derive_key_v(version: i8, password: &str, salt: &[u8]) -> Option<Zeroizing<[u8; KEY_LEN]>> {
+    match version {
+        1 => {
+            let mut key = Zeroizing::new([0u8; KEY_LEN]);
+            pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITER, &mut *key);
+            Some(key)
+        }
+        2 => Some(derive_key(password, salt)),
+        // if input user neither 1 or 2 fallback to pbkdf2
+        _ => {
+            let mut key = Zeroizing::new([0u8; KEY_LEN]);
+            pbkdf2_hmac::<Sha256>(password.as_bytes(), salt, PBKDF2_ITER, &mut *key);
+            Some(key)
+        }
+    }
+}
+fn decrypt_file(buf: &[u8], password: &str, version: i8) -> Result<Vec<u8>, String> {
     let mut offset = 0;
     if buf.len() < offset + SALT_LEN {
         return Err("Invalid file: missing salt1".to_string());
@@ -175,17 +210,18 @@ fn decrypt_file(buf: &[u8], password: &str) -> Result<Vec<u8>, String> {
         return Err("Invalid file: missing encrypted data".to_string());
     }
     let enc_data = &buf[offset..offset + enc_data_len];
-    let mut key1 = [0u8; KEY_LEN];
-    pbkdf2_hmac::<Sha256>(password.as_bytes(), salt1, PBKDF2_ITER, &mut key1);
-    let cipher1 = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key1));
+    let key1 = derive_key_v(version, password, salt1)
+        .unwrap_or_else(|| panic!("key is not valid, something went wrong!"));
+    let cipher1 = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key1[..]));
     let filename_bytes = cipher1
         .decrypt(Nonce::from_slice(nonce1), enc_filename)
         .map_err(|_| "Failed to decrypt filename".to_string())?;
-    let _ =
-        String::from_utf8(filename_bytes).map_err(|_| "Filename is not valid UTF-8".to_string())?;
-    let mut key2 = [0u8; KEY_LEN];
-    pbkdf2_hmac::<Sha256>(password.as_bytes(), salt2, PBKDF2_ITER, &mut key2);
-    let cipher2 = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key2));
+    if let Err(err) = String::from_utf8(filename_bytes) {
+        return Err(format!("{err}"));
+    };
+    let key2 = derive_key_v(version, password, salt2)
+        .unwrap_or_else(|| panic!("key is not valid, something went wrong!"));
+    let cipher2 = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key2[..]));
     let data = cipher2
         .decrypt(Nonce::from_slice(nonce2), enc_data)
         .map_err(|_| "Failed to decrypt data".to_string())?;
@@ -195,12 +231,13 @@ fn decrypt_file(buf: &[u8], password: &str) -> Result<Vec<u8>, String> {
 fn encrypt_with_password(
     data: &[u8],
     password: &str,
+    version: i8,
 ) -> (Vec<u8>, [u8; SALT_LEN], [u8; NONCE_LEN]) {
     let mut salt = [0u8; SALT_LEN];
     OsRng.fill_bytes(&mut salt);
-    let mut key = [0u8; KEY_LEN];
-    pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, PBKDF2_ITER, &mut key);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+    let key = derive_key_v(version, password, &salt)
+        .unwrap_or_else(|| panic!("key is not valid, something went wrong!"));
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key[..]));
     let mut nonce = [0u8; NONCE_LEN];
     OsRng.fill_bytes(&mut nonce);
     let ciphertext = cipher
